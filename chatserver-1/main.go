@@ -10,11 +10,10 @@ import (
 )
 
 type Client struct {
-	name string
-	conn net.Conn
-	out  chan []byte
+	username string
+	conn     net.Conn
+	out      chan []byte
 }
-
 type Room struct {
 	clients map[*Client]bool
 	mu      sync.Mutex
@@ -63,23 +62,25 @@ func writeLoop(c *Client) {
 
 func handleClient(conn net.Conn, room *Room) {
 	defer conn.Close()
-
 	reader := bufio.NewReader(conn)
 
-	conn.Write([]byte("enter your name: "))
-	nameLine, err := reader.ReadString('\n')
-	if err != nil {
-		return
+	var name string
+	for {
+		conn.Write([]byte("enter your name: "))
+		nameLine, err := reader.ReadString('\n')
+		if err != nil {
+			return //client disconnected while we were asking
+		}
+		name = strings.TrimSpace(nameLine)
+		if name != "" {
+			break
+		}
+		conn.Write([]byte("name cannot be blank!\n"))
 	}
-	name := strings.TrimSpace(nameLine)
-	if name == "" {
-		return
-	}
-
 	client := &Client{
-		name: name,
-		conn: conn,
-		out:  make(chan []byte, 16),
+		username: name,
+		conn:     conn,
+		out:      make(chan []byte, 16),
 	}
 
 	room.Add(client)
@@ -113,7 +114,6 @@ func main() {
 		log.Fatalf("listen failed: %v", err)
 	}
 	defer listener.Close()
-
 	log.Println("chat server listening on :8080")
 
 	room := NewRoom()
